@@ -1,0 +1,14 @@
+{
+  "classes": [
+    "neutral",
+    "flap",
+    "glide",
+    "dive",
+    "bank_left",
+    "bank_right"
+  ],
+  "window_size": 30,
+  "input_dim": 39,
+  "best_val_accuracy": 1.0,
+  "training_source": "synthetic"
+}

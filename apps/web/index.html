@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fatal Bird Vision</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="hud">
+        <div class="hud-left">
+          <span class="hud-icon">🍎</span>
+          <span id="apple-count">0/0</span>
+        </div>
+        <div class="hud-center">
+          <span id="ring-count">Rings 0</span>
+          <span id="score-total">Score 0</span>
+        </div>
+        <div class="hud-right">
+          <span class="hud-icon">⏱</span>
+          <span id="timer">0:00</span>
+        </div>
+      </div>
+
+      <div id="gesture-debug">
+        <span id="gesture-label">—</span>
+        <span id="gesture-confidence">—</span>
+      </div>
+
+      <div id="webcam-panel">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="skeleton-overlay"></canvas>
+        <div id="steer-reticle" aria-hidden="true"></div>
+        <div id="calibration-banner" class="hidden">
+          <p>Align your body dot with the center dot, then hold a T-pose</p>
+          <div id="calibration-progress"></div>
+        </div>
+      </div>
+
+      <div id="game-reticle" aria-hidden="true"></div>
+
+      <div id="overlay">
+        <div id="start-screen" class="panel">
+          <h1>Fatal Bird Vision</h1>
+          <p>Move your body so the red dot meets the center dot to fly straight. Shift up or down to climb or dive. Flap to gain lift.</p>
+          <button id="btn-start">Start Flight</button>
+          <button id="btn-collect" class="secondary">Record Gestures</button>
+          <p class="hint">Keyboard: Space flap · A/D steer · W/S up/down · R restart</p>
+        </div>
+
+        <div id="collect-screen" class="panel hidden">
+          <h2>Gesture Recorder</h2>
+          <p>Hold a label, perform the gesture for 3 seconds, repeat for each class.</p>
+          <div class="collect-buttons">
+            <button data-label="flap">Record Flap</button>
+            <button data-label="glide">Record Glide</button>
+            <button data-label="dive">Record Dive</button>
+            <button data-label="bank_left">Record Bank Left</button>
+            <button data-label="bank_right">Record Bank Right</button>
+          </div>
+          <p id="collect-status">Ready</p>
+          <button id="btn-export-data">Export Dataset JSON</button>
+          <button id="btn-back-game" class="secondary">Back to Game</button>
+        </div>
+
+        <div id="finish-screen" class="panel hidden">
+          <h2>Course Complete</h2>
+          <p id="finish-stats"></p>
+          <button id="btn-restart">Fly Again</button>
+        </div>
+      </div>
+
+      <canvas id="game-canvas"></canvas>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

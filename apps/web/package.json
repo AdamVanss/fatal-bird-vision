@@ -1,0 +1,24 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:network": "vite --config vite.network.config.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "preview:network": "vite preview --config vite.network.config.ts --host"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@types/three": "^0.185.4",
+    "onnxruntime-web": "^1.27.0",
+    "three": "^0.185.1"
+  }
+}

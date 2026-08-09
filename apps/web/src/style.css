@@ -1,0 +1,322 @@
+:root {
+  --bg: #0a1210;
+  --panel: rgba(8, 18, 16, 0.92);
+  --accent: #3ecf8e;
+  --accent-dim: #2a9b6a;
+  --text: #e8f5ef;
+  --muted: #8fb9a6;
+  --warn: #f0c14b;
+  --border: rgba(62, 207, 142, 0.25);
+  --font-display: "Syne", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  pointer-events: none;
+  font-size: 0.95rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.hud-left,
+.hud-center,
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hud-center {
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+#webcam-panel {
+  position: fixed;
+  top: 4.5rem;
+  left: 1rem;
+  z-index: 12;
+  width: min(280px, 32vw);
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+#webcam {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  z-index: 0;
+}
+
+#skeleton-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.steer-dot,
+#steer-reticle,
+#game-reticle {
+  pointer-events: none;
+}
+
+#steer-reticle,
+#game-reticle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+#steer-reticle::before,
+#steer-reticle::after,
+#game-reticle::before,
+#game-reticle::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+#steer-reticle::before,
+#game-reticle::before {
+  width: 2px;
+  height: 34px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#steer-reticle::after,
+#game-reticle::after {
+  width: 34px;
+  height: 2px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#steer-reticle {
+  top: 50%;
+  left: 50%;
+}
+
+#steer-reticle.aligned,
+#game-reticle.aligned {
+  border-color: #3ecf8e;
+  box-shadow: 0 0 12px rgba(62, 207, 142, 0.65);
+}
+
+#steer-reticle.aligned::before,
+#steer-reticle.aligned::after,
+#game-reticle.aligned::before,
+#game-reticle.aligned::after {
+  background: #3ecf8e;
+}
+
+#game-reticle {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 9;
+}
+
+#calibration-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.65);
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.85rem;
+}
+
+#calibration-progress {
+  width: 70%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#calibration-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+#gesture-debug {
+  position: fixed;
+  top: 4.5rem;
+  right: 1rem;
+  z-index: 11;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+#gesture-label {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#overlay .panel {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2rem 2.5rem;
+  max-width: 480px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+}
+
+#overlay h1,
+#overlay h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+}
+
+#overlay p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.hint {
+  font-size: 0.75rem !important;
+  margin-top: 1rem !important;
+  margin-bottom: 0 !important;
+}
+
+button {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.65rem 1.25rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+button:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  margin-left: 0.5rem;
+}
+
+.collect-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.collect-buttons button {
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  #webcam-panel {
+    width: 120px;
+    top: auto;
+    bottom: 1rem;
+    left: 1rem;
+  }
+
+  #gesture-debug {
+    top: auto;
+    bottom: 1rem;
+    right: 1rem;
+  }
+}

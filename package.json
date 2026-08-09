@@ -1,0 +1,13 @@
+{
+  "name": "fatal-bird-vision",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "dev:network": "npm run dev:network --prefix apps/web",
+    "build": "npm run build --prefix apps/web",
+    "preview": "npm run preview --prefix apps/web",
+    "preview:network": "npm run preview:network --prefix apps/web",
+    "train": "cd ml && python train.py",
+    "export-model": "cd ml && python export_onnx.py"
+  }
+}
