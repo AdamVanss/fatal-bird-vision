@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import {
+  VISUAL_FOG_COLOR,
+  VISUAL_GROUND_COLOR,
+  VISUAL_TREE_LEAF_COLOR,
+  VISUAL_TREE_TRUNK_COLOR,
+  WORLD,
+} from "../constants";
 
 function terrainHeight(x: number, z: number): number {
   return (
@@ -13,23 +20,9 @@ export class World {
   readonly terrainMesh: THREE.Mesh;
 
   constructor() {
-    this.scene.background = new THREE.Color(0x87b8e8);
-    this.scene.fog = new THREE.Fog(0x87b8e8, 30, 120);
-
-    const hemi = new THREE.HemisphereLight(0xd4ebff, 0x3d5c45, 0.85);
-    this.scene.add(hemi);
-
-    const sun = new THREE.DirectionalLight(0xfff4dd, 1.0);
-    sun.position.set(20, 40, 15);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 80;
-    sun.shadow.camera.left = -30;
-    sun.shadow.camera.right = 30;
-    sun.shadow.camera.top = 30;
-    sun.shadow.camera.bottom = -30;
-    this.scene.add(sun);
+    // Lighting is owned by LightingManager; this only sets the sky backdrop
+    // (matched to the fog color so distance blends with the background).
+    this.scene.background = new THREE.Color(VISUAL_FOG_COLOR);
 
     const groundGeo = new THREE.PlaneGeometry(120, 280, 40, 80);
     groundGeo.rotateX(-Math.PI / 2);
@@ -44,13 +37,13 @@ export class World {
     this.terrainMesh = new THREE.Mesh(
       groundGeo,
       new THREE.MeshStandardMaterial({
-        color: 0x4a7a52,
+        color: VISUAL_GROUND_COLOR,
         roughness: 0.95,
         flatShading: true,
       }),
     );
     this.terrainMesh.receiveShadow = true;
-    this.terrainMesh.position.set(0, -4, 110);
+    this.terrainMesh.position.set(0, WORLD.terrainY, 110);
     this.scene.add(this.terrainMesh);
 
     this.addTrees();
@@ -59,10 +52,12 @@ export class World {
 
   private addTrees(): void {
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.16, 1.0, 5);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
+    const trunkMat = new THREE.MeshStandardMaterial({
+      color: VISUAL_TREE_TRUNK_COLOR,
+    });
     const leafGeo = new THREE.ConeGeometry(0.7, 1.8, 5);
     const leafMat = new THREE.MeshStandardMaterial({
-      color: 0x2d6b4a,
+      color: VISUAL_TREE_LEAF_COLOR,
       flatShading: true,
     });
 
@@ -70,7 +65,7 @@ export class World {
       const side = i % 2 === 0 ? 1 : -1;
       const x = side * (8 + Math.random() * 6);
       const z = Math.random() * 230 + 5;
-      const y = terrainHeight(x, z) - 4;
+      const y = terrainHeight(x, z) + WORLD.terrainY;
       const tree = new THREE.Group();
       tree.add(
         new THREE.Mesh(trunkGeo, trunkMat),

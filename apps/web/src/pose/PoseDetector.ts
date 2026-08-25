@@ -3,6 +3,11 @@ import {
   FilesetResolver,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
+import {
+  POSE_DETECT,
+  VISUAL_SKELETON_BONE_COLOR,
+  VISUAL_SKELETON_JOINT_COLOR,
+} from "../constants";
 import type { NormalizedFrame } from "../types";
 import { LandmarkNormalizer } from "./LandmarkNormalizer";
 import { LandmarkBuffer } from "./LandmarkBuffer";
@@ -17,13 +22,20 @@ const WASM_BASE =
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
 
+/**
+ * Consecutive `detectForVideo` throws tolerated before rebuilding the
+ * landmarker on the CPU delegate (see POSE_DETECT.fallbackErrorFrames).
+ */
+const MAX_DETECT_ERROR_STREAK = POSE_DETECT.fallbackErrorFrames;
+
 export class PoseDetector {
   private landmarker: PoseLandmarker | null = null;
   private readonly normalizer = new LandmarkNormalizer();
   readonly buffer = new LandmarkBuffer();
   private lastTimestamp = -1;
-  private emptyFrameStreak = 0;
+  private detectErrorStreak = 0;
   private delegate: "GPU" | "CPU" = "GPU";
+  private fallbackInProgress = false;
 
   lastRawLandmarks: Array<{
     x: number;
@@ -35,50 +47,72 @@ export class PoseDetector {
   tracking = false;
 
   async init(): Promise<void> {
-    await this.createLandmarker("GPU");
+    this.landmarker = await this.buildLandmarker("GPU");
   }
 
-  private async createLandmarker(delegate: "GPU" | "CPU"): Promise<void> {
-    this.delegate = delegate;
+  close(): void {
+    this.landmarker?.close();
+    this.landmarker = null;
+  }
+
+  private async buildLandmarker(delegate: "GPU" | "CPU"): Promise<PoseLandmarker> {
     const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-    this.landmarker = await PoseLandmarker.createFromOptions(vision, {
+    return PoseLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath: MODEL_URL,
         delegate,
       },
       runningMode: "VIDEO",
       numPoses: 1,
-      minPoseDetectionConfidence: 0.35,
-      minPosePresenceConfidence: 0.35,
-      minTrackingConfidence: 0.35,
+      minPoseDetectionConfidence: POSE_DETECT.minConfidence,
+      minPosePresenceConfidence: POSE_DETECT.minConfidence,
+      minTrackingConfidence: POSE_DETECT.minConfidence,
     });
   }
 
   private async fallbackToCpu(): Promise<void> {
-    if (this.delegate === "CPU") return;
-    console.warn("Pose GPU delegate failed — falling back to CPU");
-    this.landmarker?.close();
-    await this.createLandmarker("CPU");
-    this.emptyFrameStreak = 0;
+    if (this.delegate === "CPU" || this.fallbackInProgress) return;
+    this.fallbackInProgress = true;
+    console.warn("Pose GPU delegate failed repeatedly — falling back to CPU");
+    try {
+      // Build first, swap second: the render loop keeps calling detect()
+      // during the await, so the old instance must stay live until replaced.
+      const cpu = await this.buildLandmarker("CPU");
+      this.landmarker?.close();
+      this.landmarker = cpu;
+      this.delegate = "CPU";
+      this.detectErrorStreak = 0;
+    } catch (err) {
+      console.error("PoseDetector: CPU fallback failed — pose tracking disabled.", err);
+    } finally {
+      this.fallbackInProgress = false;
+    }
   }
 
   detect(video: HTMLVideoElement, timestampMs: number): PoseFrame | null {
     if (!this.landmarker || video.readyState < 2) return null;
 
     const ts = Math.max(timestampMs, this.lastTimestamp + 1);
-    if (ts === this.lastTimestamp) return null;
     this.lastTimestamp = ts;
 
-    const result = this.landmarker.detectForVideo(video, ts);
+    let result;
+    try {
+      result = this.landmarker.detectForVideo(video, ts);
+    } catch {
+      this.detectErrorStreak += 1;
+      if (this.detectErrorStreak >= MAX_DETECT_ERROR_STREAK) {
+        void this.fallbackToCpu();
+      }
+      return null;
+    }
+    this.detectErrorStreak = 0;
+
     if (!result.landmarks.length) {
       this.lastRawLandmarks = null;
       this.tracking = false;
-      this.emptyFrameStreak += 1;
-      if (this.emptyFrameStreak > 90) void this.fallbackToCpu();
       return null;
     }
 
-    this.emptyFrameStreak = 0;
     const raw = result.landmarks[0];
     this.lastRawLandmarks = raw;
     this.tracking = true;
@@ -94,24 +128,16 @@ export class PoseDetector {
     return this.detect(video, video.currentTime * 1000);
   }
 
-  getWindow(): Float32Array | null {
-    return this.buffer.getWindow();
-  }
-
   calibrateFromFrame(frame: PoseFrame): void {
     if (!frame.normalized) return;
     this.normalizer.calibrate(frame.normalized.landmarks);
-  }
-
-  getScale(): number {
-    return this.normalizer.shoulderScale;
   }
 }
 
 export class SkeletonOverlay {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  private drawingUtils: DrawingUtils | null = null;
+  private readonly drawingUtils: DrawingUtils;
 
   constructor(canvasId: string) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -120,8 +146,8 @@ export class SkeletonOverlay {
   }
 
   resize(video: HTMLVideoElement): void {
-    const w = video.videoWidth || 640;
-    const h = video.videoHeight || 480;
+    const w = video.videoWidth || POSE_DETECT.defaultVideoWidth;
+    const h = video.videoHeight || POSE_DETECT.defaultVideoHeight;
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
@@ -131,44 +157,22 @@ export class SkeletonOverlay {
   draw(
     video: HTMLVideoElement,
     landmarks: Array<{ x: number; y: number; z?: number }> | null,
-    bodyCenter: { x: number; y: number } | null = null,
-    aligned = false,
   ): void {
     this.resize(video);
 
-    if (!landmarks || !this.drawingUtils) {
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      return;
-    }
-
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    if (!landmarks) return;
 
     this.drawingUtils.drawConnectors(
       landmarks as never,
       PoseLandmarker.POSE_CONNECTIONS,
-      { color: "#5ecfff", lineWidth: 3 },
+      { color: VISUAL_SKELETON_BONE_COLOR, lineWidth: 3 },
     );
     this.drawingUtils.drawLandmarks(landmarks as never, {
-      color: "#f0c14b",
+      color: VISUAL_SKELETON_JOINT_COLOR,
       lineWidth: 1,
       radius: 5,
     });
-
-    if (bodyCenter) {
-      const x = bodyCenter.x * this.canvas.width;
-      const y = bodyCenter.y * this.canvas.height;
-      const r = aligned ? 14 : 11;
-
-      this.ctx.beginPath();
-      this.ctx.arc(x, y, r + 4, 0, Math.PI * 2);
-      this.ctx.strokeStyle = aligned ? "#3ecf8e" : "#ff6b6b";
-      this.ctx.lineWidth = 3;
-      this.ctx.stroke();
-
-      this.ctx.beginPath();
-      this.ctx.arc(x, y, r, 0, Math.PI * 2);
-      this.ctx.fillStyle = aligned ? "rgba(62, 207, 142, 0.85)" : "rgba(255, 107, 107, 0.9)";
-      this.ctx.fill();
-    }
   }
 }

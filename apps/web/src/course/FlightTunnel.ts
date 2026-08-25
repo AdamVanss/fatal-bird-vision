@@ -11,20 +11,28 @@ export class FlightTunnel {
   readonly waypoints: THREE.Vector3[];
   readonly finishZ: number;
   private readonly curve: THREE.CatmullRomCurve3;
-  private readonly mesh: THREE.Group;
+  readonly mesh: THREE.Group;
 
-  constructor(waypoints: TunnelWaypoint[]) {
+  constructor(waypoints: TunnelWaypoint[], finishZ: number) {
     this.waypoints = waypoints.map((w) => new THREE.Vector3(w.x, w.y, w.z));
-    this.finishZ = this.waypoints[this.waypoints.length - 1].z + 20;
-    this.curve = new THREE.CatmullRomCurve3(this.waypoints, false, "catmullrom", 0.35);
+    this.finishZ = finishZ;
+    this.curve = new THREE.CatmullRomCurve3(
+      this.waypoints,
+      false,
+      "catmullrom",
+      TUNNEL.curveTension,
+    );
     this.mesh = this.buildVisuals();
   }
 
-  get meshGroup(): THREE.Group {
-    return this.mesh;
+  get playHalfWidth(): number {
+    return TUNNEL.playHalfWidth;
   }
 
-  /** Tunnel center on the course line at the bird's current Z */
+  get playHalfHeight(): number {
+    return TUNNEL.playHalfHeight;
+  }
+
   getCenterAt(z: number): THREE.Vector3 {
     const pts = this.waypoints;
     if (z <= pts[0].z) return pts[0].clone();
@@ -32,13 +40,13 @@ export class FlightTunnel {
     if (z >= last.z) return last.clone();
 
     for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      if (z >= a.z && z <= b.z) {
-        const f = (z - a.z) / (b.z - a.z);
+      const before = pts[i];
+      const after = pts[i + 1];
+      if (z >= before.z && z <= after.z) {
+        const fraction = (z - before.z) / (after.z - before.z);
         return new THREE.Vector3(
-          THREE.MathUtils.lerp(a.x, b.x, f),
-          THREE.MathUtils.lerp(a.y, b.y, f),
+          THREE.MathUtils.lerp(before.x, after.x, fraction),
+          THREE.MathUtils.lerp(before.y, after.y, fraction),
           z,
         );
       }
@@ -48,17 +56,13 @@ export class FlightTunnel {
     return this.curve.getPointAt(THREE.MathUtils.clamp(z / total, 0, 1));
   }
 
-  /** Hard clamp — bird cannot leave the tunnel volume */
   constrain(position: THREE.Vector3, velocity: THREE.Vector3): void {
     const center = this.getCenterAt(position.z);
-    const hw = TUNNEL.playHalfWidth;
-    const hh = TUNNEL.playHalfHeight;
-
     const relX = position.x - center.x;
     const relY = position.y - center.y;
 
-    const clampedX = THREE.MathUtils.clamp(relX, -hw, hw);
-    const clampedY = THREE.MathUtils.clamp(relY, -hh, hh);
+    const clampedX = THREE.MathUtils.clamp(relX, -this.playHalfWidth, this.playHalfWidth);
+    const clampedY = THREE.MathUtils.clamp(relY, -this.playHalfHeight, this.playHalfHeight);
 
     if (clampedX !== relX) velocity.x = 0;
     if (clampedY !== relY) velocity.y = 0;
@@ -71,8 +75,8 @@ export class FlightTunnel {
   getGuidanceForce(position: THREE.Vector3): { x: number; y: number } {
     const center = this.getCenterAt(position.z);
     return {
-      x: (center.x - position.x) * 0.2,
-      y: (center.y - position.y) * 0.25,
+      x: (center.x - position.x) * TUNNEL.guidanceStrengthX,
+      y: (center.y - position.y) * TUNNEL.guidanceStrengthY,
     };
   }
 
@@ -103,7 +107,11 @@ export class FlightTunnel {
       metalness: 0.4,
     });
 
-    for (let z = 0; z <= this.waypoints[this.waypoints.length - 1].z; z += 13) {
+    for (
+      let z = 0;
+      z <= this.waypoints[this.waypoints.length - 1].z;
+      z += TUNNEL.frameSpacing
+    ) {
       const center = this.getCenterAt(z);
       const frame = new THREE.Mesh(
         new THREE.TorusGeometry(visualRadius * 0.92, 0.06, 6, 24),

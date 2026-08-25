@@ -1,17 +1,21 @@
 import type { FlightInput } from "../types";
 import { FLIGHT } from "../constants";
-import type { Bird } from "./Bird";
-import type { FlightTunnel } from "./FlightTunnel";
+import type { Bird } from "../bird/Bird";
+import type { FlightTunnel } from "../course/FlightTunnel";
 
-/** Rail-style flight: bird always faces +Z; body-steer moves it on X/Y */
 export class FlightController {
   private smoothedFlap = 0;
   private smoothedSteerX = 0;
   private smoothedSteerY = 0;
+  private speedMultiplier = 1;
   private tunnel: FlightTunnel | null = null;
 
   setTunnel(tunnel: FlightTunnel): void {
     this.tunnel = tunnel;
+  }
+
+  setSpeedMultiplier(multiplier: number): void {
+    this.speedMultiplier = Math.max(multiplier, 0);
   }
 
   update(bird: Bird, input: FlightInput, dt: number): void {
@@ -25,15 +29,19 @@ export class FlightController {
     const flap = Math.max(this.smoothedFlap, input.flapEnergy * 0.75);
 
     let targetX = this.smoothedSteerX * FLIGHT.lateralSpeed;
-    let targetY = this.smoothedSteerY * FLIGHT.verticalSpeed;
 
-    targetY += flap * FLIGHT.verticalSpeed * 0.45;
-
-    if (input.gestureClass === "glide") {
-      targetY += FLIGHT.glideLift * 0.35;
+    // State-driven vertical model: keys override, neutral sinks at a constant
+    // rate, glide/bank hold altitude, and flap pumps add lift on top.
+    let targetY: number;
+    if (input.bodySteerY !== 0) {
+      targetY = this.smoothedSteerY * FLIGHT.verticalSpeed;
+    } else if (input.gestureClass === "neutral") {
+      targetY = -FLIGHT.fallSpeed;
+    } else {
+      targetY = 0;
     }
 
-    targetY += FLIGHT.gravity * 0.25;
+    targetY += flap * FLIGHT.flapLift;
 
     if (this.tunnel) {
       const guide = this.tunnel.getGuidanceForce(bird.position);
@@ -48,7 +56,7 @@ export class FlightController {
 
     vel.x += (targetX - vel.x) * alpha;
     vel.y += (targetY - vel.y) * alpha;
-    vel.z = FLIGHT.forwardSpeed;
+    vel.z = FLIGHT.forwardSpeed * this.speedMultiplier;
 
     bird.position.x += vel.x * dt;
     bird.position.y += vel.y * dt;
@@ -56,15 +64,15 @@ export class FlightController {
 
     if (this.tunnel) {
       this.tunnel.constrain(bird.position, vel);
-      this.tunnel.constrain(bird.position, vel);
     }
 
-    bird.updateVisuals(dt, flap);
+    bird.update(dt, flap);
   }
 
   reset(): void {
     this.smoothedFlap = 0;
     this.smoothedSteerX = 0;
     this.smoothedSteerY = 0;
+    this.speedMultiplier = 1;
   }
 }

@@ -99,26 +99,20 @@ body,
   pointer-events: none;
 }
 
-.steer-dot,
-#steer-reticle,
 #game-reticle {
   pointer-events: none;
-}
-
-#steer-reticle,
-#game-reticle {
-  position: absolute;
+  position: fixed;
+  top: 50%;
+  left: 50%;
   width: 22px;
   height: 22px;
   border: 2px solid var(--accent);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  z-index: 3;
+  z-index: 9;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
-#steer-reticle::before,
-#steer-reticle::after,
 #game-reticle::before,
 #game-reticle::after {
   content: "";
@@ -127,7 +121,6 @@ body,
   opacity: 0.85;
 }
 
-#steer-reticle::before,
 #game-reticle::before {
   width: 2px;
   height: 34px;
@@ -136,7 +129,6 @@ body,
   transform: translate(-50%, -50%);
 }
 
-#steer-reticle::after,
 #game-reticle::after {
   width: 34px;
   height: 2px;
@@ -145,29 +137,116 @@ body,
   transform: translate(-50%, -50%);
 }
 
-#steer-reticle {
-  top: 50%;
-  left: 50%;
-}
+/* ===== AI Brain overlay (AIBrainHUD) ===== */
 
-#steer-reticle.aligned,
-#game-reticle.aligned {
-  border-color: #3ecf8e;
-  box-shadow: 0 0 12px rgba(62, 207, 142, 0.65);
-}
-
-#steer-reticle.aligned::before,
-#steer-reticle.aligned::after,
-#game-reticle.aligned::before,
-#game-reticle.aligned::after {
-  background: #3ecf8e;
-}
-
-#game-reticle {
+.ai-brain {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  z-index: 9;
+  bottom: 20px;
+  right: 20px;
+  width: 220px;
+  max-height: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  z-index: 15;
+  box-sizing: border-box;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.ai-brain-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.ai-brain-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ai-brain-toggle {
+  /* The panel ignores the mouse; the toggle must not */
+  pointer-events: auto;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.ai-brain-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Collapsed keeps only the header strip, so the toggle stays reachable */
+.ai-brain.collapsed > :not(.ai-brain-head) {
+  display: none;
+}
+
+.ai-brain-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.ai-brain-label {
+  font-size: 9px;
+  width: 52px;
+  color: var(--muted);
+  text-align: left;
+}
+
+.ai-brain-label.winner {
+  color: var(--accent);
+}
+
+.ai-brain-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ai-brain-fill {
+  height: 8px;
+  width: 0%;
+  background: var(--accent-dim);
+  border-radius: 2px;
+  transition: width 60ms linear;
+}
+
+.ai-brain-fill.winner {
+  background: var(--accent);
+}
+
+.ai-brain-winner {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 6px;
+  display: block;
+}
+
+.ai-brain-spark {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.7;
 }
 
 #calibration-banner {
