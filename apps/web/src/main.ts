@@ -1,5 +1,6 @@
-import "./style.css";
-import { Game } from "./game/Game";
+// Stylesheet loads via <link> in index.html <head> (render-blocking), so the
+// page can't flash unstyled before this module graph resolves.
+import { Game } from "./core/Game";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const game = new Game(canvas);

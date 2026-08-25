@@ -1,153 +1,177 @@
-import * as ort from "onnxruntime-web";
-import {
-  GESTURE_CLASSES,
-  INPUT_DIM,
-  WINDOW_SIZE,
-  type GestureClass,
-} from "../constants";
-import type { FlightInput, GestureModelOutput } from "../types";
+import type { GestureClass } from "../constants";
+import { LANDMARK_SLOTS, POSE_PUMP, POSE_ZONE } from "../constants";
+import type { FlightInput } from "../types";
+import { clamp } from "../utils/math";
 
-const MODEL_URL = "/models/gesture_model.onnx";
-const META_URL = "/models/gesture_model.meta.json";
+type ArmZone = "up" | "level" | "down";
 
+/**
+ * Shoulder-relative y offset of a joint, in normalized units (y grows
+ * downward, so negative = above the shoulder line).
+ */
+function jointOffset(
+  frame: Float32Array,
+  joint: number,
+  shoulder: number,
+): number {
+  return frame[joint * 3 + 1] - frame[shoulder * 3 + 1];
+}
+
+function nextArmZone(
+  zone: ArmZone,
+  wristOffset: number,
+  elbowOffset: number,
+): ArmZone {
+  const { margin, levelReturn } = POSE_ZONE;
+  const bothAbove = wristOffset < -margin && elbowOffset < -margin;
+  const bothBelow = wristOffset > margin && elbowOffset > margin;
+
+  if (zone === "up") {
+    if (bothBelow) return "down";
+    return wristOffset < -levelReturn || elbowOffset < -levelReturn
+      ? "up"
+      : "level";
+  }
+  if (zone === "down") {
+    if (bothAbove) return "up";
+    return wristOffset > levelReturn || elbowOffset > levelReturn
+      ? "down"
+      : "level";
+  }
+  return bothAbove ? "up" : bothBelow ? "down" : "level";
+}
+
+/**
+ * Pose-grammar flight controls: named arm poses map straight to flight states.
+ *
+ * Glide = nothing below the shoulder line (T-pose, both arms up, mixed up/level).
+ * Bank = one arm up while the other is down, sliding toward the raised hand's
+ * screen side at a speed proportional to the raise depth. Neutral = anything
+ * held down without the opposite arm up — steady sink. Flap = discrete upward
+ * pumps of both hands; holding hands high never produces lift.
+ */
 export class GestureInference {
-  private session: ort.InferenceSession | null = null;
-  private loaded = false;
-  private syntheticOnly = true;
+  private leftZone: ArmZone = "level";
+  private rightZone: ArmZone = "level";
+  private burstEnergy = 0;
+  private burstUntil = 0;
+  private lastPumpAt = -Infinity;
 
-  async init(): Promise<boolean> {
-    try {
-      const metaRes = await fetch(META_URL);
-      if (metaRes.ok) {
-        const meta = (await metaRes.json()) as { training_source?: string };
-        this.syntheticOnly = meta.training_source !== "recorded";
-      }
-
-      ort.env.wasm.wasmPaths =
-        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
-      this.session = await ort.InferenceSession.create(MODEL_URL, {
-        executionProviders: ["wasm"],
-      });
-      this.loaded = true;
-      return true;
-    } catch (err) {
-      console.warn("ONNX model not loaded, using heuristic fallback:", err);
-      this.loaded = false;
-      return false;
-    }
+  reset(): void {
+    this.leftZone = "level";
+    this.rightZone = "level";
+    this.burstEnergy = 0;
+    this.burstUntil = 0;
+    this.lastPumpAt = -Infinity;
   }
 
-  isSyntheticOnly(): boolean {
-    return this.syntheticOnly;
-  }
-
-  isReady(): boolean {
-    return this.loaded && this.session !== null;
-  }
-
-  async infer(window: Float32Array): Promise<GestureModelOutput | null> {
-    if (!this.session || window.length !== WINDOW_SIZE * INPUT_DIM) return null;
-
-    const input = new ort.Tensor(
-      "float32",
-      window,
-      [1, WINDOW_SIZE, INPUT_DIM],
-    );
-    const results = await this.session.run({ landmarks: input });
-
-    const flap = results.flap_energy?.data as Float32Array;
-    const bank = results.bank?.data as Float32Array;
-    const pitch = results.pitch_intent?.data as Float32Array;
-    const logits = results.gesture_logits?.data as Float32Array;
-
-    if (!flap || !bank || !pitch || !logits) return null;
-
-    const probs = softmax(Array.from(logits));
-    let maxIdx = 0;
-    for (let i = 1; i < probs.length; i++) {
-      if (probs[i] > probs[maxIdx]) maxIdx = i;
-    }
-
-    return {
-      flapEnergy: clamp(flap[0], 0, 1),
-      bank: clamp(bank[0], -1, 1),
-      pitchIntent: clamp(pitch[0], -1, 1),
-      classIndex: maxIdx,
-      classProbabilities: new Float32Array(probs),
-    };
-  }
-
-  toFlightInput(output: GestureModelOutput): FlightInput {
-    const gestureClass = GESTURE_CLASSES[output.classIndex] ?? "neutral";
-    const confidence = output.classProbabilities[output.classIndex] ?? 0;
-    return {
-      flapEnergy: output.flapEnergy,
-      bank: output.bank,
-      pitchIntent: output.pitchIntent,
-      bodySteerX: output.bank,
-      bodySteerY: -output.pitchIntent,
-      gestureClass,
-      confidence,
-      source: "model",
-    };
-  }
-
-  /** Instant control from the latest 1–2 pose frames (no 30-frame wait) */
   heuristicFromFrames(
     current: Float32Array,
     previous: Float32Array | null,
   ): FlightInput {
-    const lWristY = current[4 * 3 + 1];
-    const rWristY = current[5 * 3 + 1];
-    const prevLWristY = previous ? previous[4 * 3 + 1] : lWristY;
-    const prevRWristY = previous ? previous[5 * 3 + 1] : rWristY;
+    const lWristOffset = jointOffset(
+      current,
+      LANDMARK_SLOTS.leftWrist,
+      LANDMARK_SLOTS.leftShoulder,
+    );
+    const rWristOffset = jointOffset(
+      current,
+      LANDMARK_SLOTS.rightWrist,
+      LANDMARK_SLOTS.rightShoulder,
+    );
+    this.updateArmZones(lWristOffset, rWristOffset, current);
 
-    const wristY = (lWristY + rWristY) / 2;
-    const prevWristY = (prevLWristY + prevRWristY) / 2;
-    const flapDelta = prevWristY - wristY;
-
-    let flapEnergy = clamp(flapDelta * 14, 0, 1);
-    if (wristY < -0.12) flapEnergy = Math.max(flapEnergy, 0.55);
-
-    const bank = clamp((lWristY - rWristY) * 4, -1, 1);
-    const pitchIntent = clamp(-wristY * 2.5, -1, 1);
-
-    let gestureClass: GestureClass = "neutral";
-    if (flapEnergy > 0.35) gestureClass = "flap";
-    else if (wristY > 0.15) gestureClass = "dive";
-    else if (Math.abs(lWristY - rWristY) < 0.07 && wristY < 0) gestureClass = "glide";
-    else if (bank < -0.3) gestureClass = "bank_left";
-    else if (bank > 0.3) gestureClass = "bank_right";
+    const { gestureClass, bodySteerX } = this.classifyBank(
+      lWristOffset,
+      rWristOffset,
+    );
+    const flapEnergy = this.updatePump(current, previous);
 
     return {
       flapEnergy,
-      bank,
-      pitchIntent,
-      bodySteerX: 0,
+      bodySteerX,
       bodySteerY: 0,
-      gestureClass,
+      gestureClass: flapEnergy > 0 ? "flap" : gestureClass,
       confidence: 0.75,
       source: "heuristic",
     };
   }
 
-  /** Legacy path for full 30-frame ML window */
-  heuristicFromWindow(window: Float32Array): FlightInput {
-    const lastFrameOffset = (WINDOW_SIZE - 1) * INPUT_DIM;
-    const prevFrameOffset = (WINDOW_SIZE - 3) * INPUT_DIM;
-    const current = window.subarray(lastFrameOffset, lastFrameOffset + INPUT_DIM);
-    const previous = window.subarray(prevFrameOffset, prevFrameOffset + INPUT_DIM);
-    return this.heuristicFromFrames(current, previous);
+  private updateArmZones(
+    lWristOffset: number,
+    rWristOffset: number,
+    current: Float32Array,
+  ): void {
+    this.leftZone = nextArmZone(
+      this.leftZone,
+      lWristOffset,
+      jointOffset(current, LANDMARK_SLOTS.leftElbow, LANDMARK_SLOTS.leftShoulder),
+    );
+    this.rightZone = nextArmZone(
+      this.rightZone,
+      rWristOffset,
+      jointOffset(current, LANDMARK_SLOTS.rightElbow, LANDMARK_SLOTS.rightShoulder),
+    );
   }
-}
 
-function softmax(logits: number[]): number[] {
-  const max = Math.max(...logits);
-  const exps = logits.map((x) => Math.exp(x - max));
-  const sum = exps.reduce((a, b) => a + b, 0);
-  return exps.map((e) => e / sum);
-}
+  /**
+   * Slide direction: the chase camera renders world −X on screen-right, and
+   * a raised LEFT wrist sits at positive normalized x — so left-up banks
+   * with negative bodySteerX (screen-right). Verified empirically at playtest.
+   */
+  private classifyBank(
+    lWristOffset: number,
+    rWristOffset: number,
+  ): { gestureClass: GestureClass; bodySteerX: number } {
+    if (this.leftZone === "up" && this.rightZone === "down") {
+      return {
+        gestureClass: "bank_right",
+        bodySteerX: -clamp(-lWristOffset / POSE_ZONE.bankFullDeflect, 0, 1),
+      };
+    }
+    if (this.leftZone === "down" && this.rightZone === "up") {
+      return {
+        gestureClass: "bank_left",
+        bodySteerX: clamp(-rWristOffset / POSE_ZONE.bankFullDeflect, 0, 1),
+      };
+    }
+    if (this.leftZone === "down" || this.rightZone === "down") {
+      // Conservative rule: an arm down without the opposite arm up ⇒ sink.
+      return { gestureClass: "neutral", bodySteerX: 0 };
+    }
+    return { gestureClass: "glide", bodySteerX: 0 };
+  }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, v));
+  /**
+   * One lift burst per upward pump of both hands; holding high does nothing.
+   * Rise is measured on shoulder-relative offsets, not raw y, so torso bob or
+   * posture shifts between frames can neither fake nor flip the direction:
+   * hands rising shrink their offset (positive term), a drop grows both terms
+   * negative — a downward sweep can never fire.
+   */
+  private updatePump(
+    current: Float32Array,
+    previous: Float32Array | null,
+  ): number {
+    const now = performance.now();
+    if (previous) {
+      const rise = Math.min(
+        jointOffset(previous, LANDMARK_SLOTS.leftWrist, LANDMARK_SLOTS.leftShoulder) -
+          jointOffset(current, LANDMARK_SLOTS.leftWrist, LANDMARK_SLOTS.leftShoulder),
+        jointOffset(previous, LANDMARK_SLOTS.rightWrist, LANDMARK_SLOTS.rightShoulder) -
+          jointOffset(current, LANDMARK_SLOTS.rightWrist, LANDMARK_SLOTS.rightShoulder),
+      );
+      if (
+        rise > POSE_PUMP.minRise &&
+        now - this.lastPumpAt >= POSE_PUMP.refractoryMs
+      ) {
+        this.lastPumpAt = now;
+        this.burstUntil = now + POSE_PUMP.holdMs;
+        // Floor at 0.85 so every registered pump crosses the shared hard-flap
+        // threshold (VISUAL_FEATHER_FLAP_THRESHOLD = 0.8).
+        this.burstEnergy = clamp(rise * POSE_PUMP.gain, 0.85, 1);
+      }
+    }
+    return now < this.burstUntil ? this.burstEnergy : 0;
+  }
 }

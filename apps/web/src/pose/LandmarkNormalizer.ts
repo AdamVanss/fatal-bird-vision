@@ -44,11 +44,4 @@ export class LandmarkNormalizer {
       this.calibrated = true;
     }
   }
-
-  /** Raw landmarks for overlay drawing */
-  static getRawLandmarks(
-    landmarks: Array<{ x: number; y: number; z: number }>,
-  ): Array<{ x: number; y: number; z: number }> {
-    return UPPER_BODY_LANDMARKS.map((i) => landmarks[i]).filter(Boolean);
-  }
 }

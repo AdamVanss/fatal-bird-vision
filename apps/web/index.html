@@ -5,9 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fatal Bird Vision</title>
+    <!-- Render-blocking stylesheet link so the page never paints unstyled
+         (a JS import in main.ts let raw HTML flash for a frame) -->
+    <link rel="stylesheet" href="/src/style.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app">
@@ -34,9 +37,8 @@
       <div id="webcam-panel">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="skeleton-overlay"></canvas>
-        <div id="steer-reticle" aria-hidden="true"></div>
         <div id="calibration-banner" class="hidden">
-          <p>Align your body dot with the center dot, then hold a T-pose</p>
+          <p>Hold a T-pose to calibrate</p>
           <div id="calibration-progress"></div>
         </div>
       </div>
@@ -46,19 +48,19 @@
       <div id="overlay">
         <div id="start-screen" class="panel">
           <h1>Fatal Bird Vision</h1>
-          <p>Move your body so the red dot meets the center dot to fly straight. Shift up or down to climb or dive. Flap to gain lift.</p>
+          <p>Hold your arms level or up to glide. Raise one arm while dropping the other to bank — left arm up slides the bird screen-right, right arm up slides it screen-left. Let both arms fall to sink, and pump both hands to flap and climb.</p>
           <button id="btn-start">Start Flight</button>
           <button id="btn-collect" class="secondary">Record Gestures</button>
-          <p class="hint">Keyboard: Space flap · A/D steer · W/S up/down · R restart</p>
+          <p class="hint">Keyboard: Space flap · A/D bank · W/S climb/sink · R restart · B toggle AI</p>
         </div>
 
         <div id="collect-screen" class="panel hidden">
           <h2>Gesture Recorder</h2>
+          <!-- "3 seconds" mirrors Game.collectTimer — keep both in sync -->
           <p>Hold a label, perform the gesture for 3 seconds, repeat for each class.</p>
           <div class="collect-buttons">
             <button data-label="flap">Record Flap</button>
             <button data-label="glide">Record Glide</button>
-            <button data-label="dive">Record Dive</button>
             <button data-label="bank_left">Record Bank Left</button>
             <button data-label="bank_right">Record Bank Right</button>
           </div>

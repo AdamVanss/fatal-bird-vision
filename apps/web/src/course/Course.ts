@@ -1,5 +1,14 @@
 import * as THREE from "three";
-import { TUNNEL } from "../constants";
+import {
+  COLLISION,
+  TUNNEL,
+  VISUAL_APPLE_COLOR,
+  VISUAL_APPLE_EMISSIVE,
+  VISUAL_RING_COLOR,
+  VISUAL_RING_EMISSIVE,
+  VISUAL_RING_GLOW,
+} from "../constants";
+import { withinCylinder } from "../utils/math";
 import type { TunnelWaypoint } from "./FlightTunnel";
 
 export class RingGate {
@@ -17,8 +26,8 @@ export class RingGate {
     const torus = new THREE.Mesh(
       new THREE.TorusGeometry(2.6, 0.2, 12, 32),
       new THREE.MeshStandardMaterial({
-        color: 0x1a2e28,
-        emissive: 0x3ecf8e,
+        color: VISUAL_RING_COLOR,
+        emissive: VISUAL_RING_EMISSIVE,
         emissiveIntensity: 0.5,
         roughness: 0.35,
         metalness: 0.6,
@@ -29,7 +38,7 @@ export class RingGate {
     const glow = new THREE.Mesh(
       new THREE.TorusGeometry(2.75, 0.06, 8, 32),
       new THREE.MeshBasicMaterial({
-        color: 0x7dffb8,
+        color: VISUAL_RING_GLOW,
         transparent: true,
         opacity: 0.55,
       }),
@@ -44,9 +53,8 @@ export class RingGate {
     const dy = birdPos.y - this.position.y;
     const dz = birdPos.z - this.position.z;
     const inRing =
-      Math.abs(dz) < 2 &&
-      Math.sqrt(dx * dx + dy * dy) < 2.4 &&
-      birdPos.z > this.position.z - 0.5;
+      withinCylinder(dx, dy, dz, COLLISION.ringRadius, COLLISION.ringDepth) &&
+      birdPos.z > this.position.z - COLLISION.ringPlaneTolerance;
     if (inRing) {
       this.passed = true;
       return true;
@@ -70,9 +78,9 @@ export class AppleCollectible {
     this.mesh = new THREE.Mesh(
       new THREE.SphereGeometry(0.35, 12, 12),
       new THREE.MeshStandardMaterial({
-        color: 0xe74c3c,
+        color: VISUAL_APPLE_COLOR,
         roughness: 0.35,
-        emissive: 0x8b1a12,
+        emissive: VISUAL_APPLE_EMISSIVE,
         emissiveIntensity: 0.2,
       }),
     );
@@ -92,7 +100,9 @@ export class AppleCollectible {
 
   tryCollect(birdPos: THREE.Vector3): boolean {
     if (this.collected) return false;
-    if (birdPos.distanceTo(this.mesh.position) < 1.4) {
+    // Measured against the logical position (not the bobbing mesh), matching
+    // RingGate's anchor convention.
+    if (birdPos.distanceTo(this.position) < COLLISION.appleRadius) {
       this.collected = true;
       return true;
     }
@@ -105,7 +115,6 @@ export interface CourseDefinition {
   apples: Array<{ z: number; y: number; x: number }>;
 }
 
-/** Tighter course — rings follow a gentle path inside the tunnel */
 export const DEFAULT_COURSE: CourseDefinition = {
   rings: [
     { z: 26, y: 7, x: 0 },
@@ -136,24 +145,29 @@ export function courseToTunnelWaypoints(
     points.push({ x: ring.x ?? 0, y: ring.y, z: ring.z });
   }
   const last = def.rings[def.rings.length - 1];
-  points.push({ x: last.x ?? 0, y: last.y, z: last.z + TUNNEL.ringSpacing });
+  points.push({
+    x: last?.x ?? 0,
+    y: last?.y ?? 7,
+    z: (last?.z ?? 0) + TUNNEL.ringSpacing,
+  });
   return points;
+}
+
+export function lastGateZ(def: CourseDefinition): number {
+  return def.rings[def.rings.length - 1]?.z ?? 0;
 }
 
 export class Course {
   readonly rings: RingGate[] = [];
   readonly apples: AppleCollectible[] = [];
-  readonly finishZ: number;
 
   constructor(def: CourseDefinition = DEFAULT_COURSE) {
-    def.rings.forEach((r, i) => {
-      this.rings.push(new RingGate(r.z, r.y, r.x ?? 0, `ring-${i}`));
+    def.rings.forEach((ringDef, i) => {
+      this.rings.push(new RingGate(ringDef.z, ringDef.y, ringDef.x ?? 0, `ring-${i}`));
     });
-    def.apples.forEach((a, i) => {
-      this.apples.push(new AppleCollectible(a.z, a.y, a.x, `apple-${i}`));
+    def.apples.forEach((appleDef, i) => {
+      this.apples.push(new AppleCollectible(appleDef.z, appleDef.y, appleDef.x, `apple-${i}`));
     });
-    this.finishZ =
-      def.rings[def.rings.length - 1].z + TUNNEL.ringSpacing;
   }
 
   addToScene(scene: THREE.Scene): void {
