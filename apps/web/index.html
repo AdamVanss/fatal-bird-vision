@@ -51,89 +51,87 @@
       <div id="overlay" class="is-menu">
         <div id="start-screen" class="menu-screen">
           <header class="menu-top">
-            <div class="menu-brand">
-              <p class="menu-club">Fatal Error Club</p>
-              <h1>Fatal Bird Vision</h1>
-            </div>
+            <h1>Fatal Bird Vision</h1>
             <div class="menu-top-actions">
+              <p class="menu-club">Fatal Error Club</p>
               <button id="btn-scores" class="secondary">Scores</button>
               <button id="btn-collect" class="ghost">Dev</button>
             </div>
           </header>
 
-          <div class="menu-stage">
-            <button type="button" id="btn-skin-prev" class="skin-arrow" aria-label="Previous bird">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-            <div class="skin-stage">
-              <canvas id="skin-canvas"></canvas>
-              <div class="skin-caption">
-                <p id="skin-name">Scarlet Macaw</p>
-                <div id="skin-dots" class="skin-dots" aria-hidden="true"></div>
-                <p id="skin-hint">Left or right to change</p>
-              </div>
-            </div>
-            <button type="button" id="btn-skin-next" class="skin-arrow" aria-label="Next bird">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5 L16 12 L9 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-          </div>
+          <div class="menu-body">
+            <div class="menu-setup">
+              <div class="menu-choices">
+                <div class="menu-field">
+                  <label class="field-label" for="player-name">Your name</label>
+                  <input
+                    id="player-name"
+                    type="text"
+                    maxlength="24"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Pilot name"
+                  />
+                  <p id="name-hint" class="field-hint hidden">Enter a name to fly.</p>
+                </div>
 
-          <div class="menu-dock">
-            <div class="menu-field">
-              <label class="field-label" for="player-name">Your name</label>
-              <input
-                id="player-name"
-                type="text"
-                maxlength="24"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="Pilot name"
-              />
-              <p id="name-hint" class="field-hint hidden">Enter a name to fly.</p>
-            </div>
+                <div id="map-grid" role="radiogroup" aria-label="Map">
+                  <button type="button" class="map-card map-canyon selected" data-map="canyon" aria-pressed="true">
+                    <img class="map-card-photo" src="/maps/canyon.png" alt="" />
+                    <span class="map-card-copy">
+                      <span class="diff-name">Canyon</span>
+                    </span>
+                  </button>
+                  <button type="button" class="map-card map-city" data-map="city" aria-pressed="false">
+                    <img class="map-card-photo" src="/maps/city.png" alt="" />
+                    <span class="map-card-copy">
+                      <span class="diff-name">City</span>
+                    </span>
+                  </button>
+                </div>
 
-            <div class="menu-picks">
-              <p class="field-label">Map</p>
-              <div id="map-grid" role="radiogroup" aria-label="Map">
-                <button type="button" class="map-card map-canyon selected" data-map="canyon" aria-pressed="true">
-                  <img class="map-card-photo" src="/maps/canyon.png" alt="" />
-                  <span class="map-card-copy">
-                    <span class="diff-name">Canyon</span>
-                  </span>
-                </button>
-                <button type="button" class="map-card map-city" data-map="city" aria-pressed="false">
-                  <img class="map-card-photo" src="/maps/city.png" alt="" />
-                  <span class="map-card-copy">
-                    <span class="diff-name">City</span>
-                  </span>
-                </button>
+                <div id="difficulty-grid" class="pick-row" role="radiogroup" aria-label="Difficulty">
+                  <button type="button" class="pick" data-diff="easy">
+                    Easy
+                    <span>1×</span>
+                  </button>
+                  <button type="button" class="pick selected" data-diff="normal" aria-pressed="true">
+                    Normal
+                    <span>1.5×</span>
+                  </button>
+                  <button type="button" class="pick" data-diff="hard">
+                    Hard
+                    <span>2.5×</span>
+                  </button>
+                  <button type="button" class="pick" data-diff="impossible">
+                    Impossible
+                    <span>4×</span>
+                  </button>
+                </div>
               </div>
-              <p class="field-label">Difficulty</p>
-              <div id="difficulty-grid" class="pick-row" role="radiogroup" aria-label="Difficulty">
-                <button type="button" class="pick" data-diff="easy">
-                  Easy
-                  <span>1×</span>
-                </button>
-                <button type="button" class="pick selected" data-diff="normal" aria-pressed="true">
-                  Normal
-                  <span>1.5×</span>
-                </button>
-                <button type="button" class="pick" data-diff="hard">
-                  Hard
-                  <span>2.5×</span>
-                </button>
-                <button type="button" class="pick" data-diff="impossible">
-                  Impossible
-                  <span>4×</span>
-                </button>
-              </div>
+
+              <button id="btn-start" type="button">Start Flight</button>
             </div>
 
-            <button id="btn-start">Start Flight</button>
+            <div class="menu-stage">
+              <div class="skin-stage">
+                <canvas id="skin-canvas"></canvas>
+                <button type="button" id="btn-skin-prev" class="skin-arrow" aria-label="Previous bird">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <button type="button" id="btn-skin-next" class="skin-arrow" aria-label="Next bird">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 5 L16 12 L9 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <div class="skin-caption">
+                  <p id="skin-name">Scarlet Macaw</p>
+                  <div id="skin-dots" class="skin-dots" aria-hidden="true"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
