@@ -141,6 +141,17 @@ Webcam
 
 The bird moves on a **rail** (constant forward speed). Player input adjusts lateral (X) and vertical (Y) position within tunnel bounds. The ONNX model is optional; live control uses heuristics from the latest pose frames when the bundled model is synthetic-only.
 
+## Host on Vercel (free)
+
+The game is a static Vite app plus `/api/players` for the leaderboard. Vercel Hobby is enough. Scores need a free **KV** store (Upstash Redis) because Vercel cannot write a JSON file the way the local kiosk does.
+
+1. Push this repo to GitHub.
+2. Open [vercel.com](https://vercel.com), import the repo, and deploy on the Hobby plan. Leave the root directory as the repo root (or set it to `apps/web`).
+3. In the Vercel project: **Storage → Create Database → KV (Upstash Redis)** and connect it to this project. That sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+4. **Redeploy** so the API can see those env vars.
+
+After that, `https://your-app.vercel.app` is HTTPS (so the webcam works), and Scores read and write the shared board. Local `npm run dev` still saves to `apps/web/data/players.json`. Flight webcam clips stay on the kiosk only; Vercel skips `/api/videos`.
+
 ## Working on the ML pipeline
 
 The default model is trained on procedural gesture sequences. For better real-world accuracy, record your own data in-game:

@@ -1,8 +1,7 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { BIRD_MODEL_URL, FLIGHT } from "../constants";
+import { BIRD_FLIGHT_SIZE, BIRD_SKINS, FLIGHT, type BirdSkinId } from "../constants";
+import { birdSkinById, instantiateBird, loadBirdGltf } from "./birdKit";
 
-/** Mirada GLTF default: head +X, up +Y — orientation 1 (+X face), no rotation */
 function alignModelForFlight(model: THREE.Object3D): void {
   model.rotation.set(0, 0, 0);
 }
@@ -16,50 +15,57 @@ export class Bird {
   private flapPhase = 0;
   private leftWingFallback: THREE.Mesh | null = null;
   private rightWingFallback: THREE.Mesh | null = null;
-  private loaded = false;
+  private skinRoot: THREE.Object3D | null = null;
+  private skinId: BirdSkinId = BIRD_SKINS[0].id;
+  private readonly nightFill: THREE.PointLight;
 
   velocity = new THREE.Vector3(0, 0, FLIGHT.forwardSpeed);
 
   constructor() {
     this.group.rotation.set(0, 0, 0);
     this.group.add(this.modelPivot);
+    this.nightFill = new THREE.PointLight(0xffe6c4, 0, 16, 1.7);
+    this.nightFill.castShadow = false;
+    this.nightFill.position.set(0, 0.6, 0.4);
+    this.group.add(this.nightFill);
     this.buildFallbackBird();
     alignModelForFlight(this.fallbackGroup);
   }
 
-  async loadModel(): Promise<void> {
-    if (this.loaded) return;
-    try {
-      const gltf = await new GLTFLoader().loadAsync(BIRD_MODEL_URL);
-      this.modelPivot.remove(this.fallbackGroup);
-
-      const model = gltf.scene;
-      model.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+  setNightFill(amount: number): void {
+    this.nightFill.intensity = amount * 2.6;
+    this.group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of mats) {
+        if (mat instanceof THREE.MeshStandardMaterial) {
+          mat.emissiveIntensity = amount * 0.55;
         }
-      });
-
-      model.scale.setScalar(0.038);
-      alignModelForFlight(model);
-
-      const box = new THREE.Box3().setFromObject(model);
-      const center = box.getCenter(new THREE.Vector3());
-      model.position.sub(center);
-
-      this.modelPivot.add(model);
-
-      if (gltf.animations.length) {
-        this.mixer = new THREE.AnimationMixer(model);
-        this.flapAction = this.mixer.clipAction(gltf.animations[0]);
-        this.flapAction.play();
-        this.flapAction.timeScale = 1.2;
       }
+    });
+  }
 
-      this.loaded = true;
+  async loadModel(): Promise<void> {
+    await this.setSkin(this.skinId);
+  }
+
+  async setSkin(id: BirdSkinId): Promise<void> {
+    const skin = birdSkinById(id);
+    try {
+      const gltf = await loadBirdGltf(skin.url);
+      if (this.skinRoot) this.modelPivot.remove(this.skinRoot);
+      this.modelPivot.remove(this.fallbackGroup);
+      const { root, mixer } = instantiateBird(gltf, skin.tint, BIRD_FLIGHT_SIZE, false, "x");
+      alignModelForFlight(root);
+      this.skinRoot = root;
+      this.mixer = mixer;
+      this.flapAction = mixer?.existingAction(gltf.animations[0]) ?? mixer?.clipAction(gltf.animations[0]) ?? null;
+      if (this.flapAction) this.flapAction.timeScale = 1.15;
+      this.modelPivot.add(root);
+      this.skinId = id;
     } catch (err) {
       console.warn("Bird model failed to load, using fallback mesh:", err);
+      if (!this.fallbackGroup.parent) this.modelPivot.add(this.fallbackGroup);
     }
   }
 
@@ -111,6 +117,7 @@ export class Bird {
     this.leftWingFallback = leftWing;
     this.rightWingFallback = rightWing;
     this.fallbackGroup.add(body, head, beak, leftWing, rightWing, tail);
+    this.fallbackGroup.scale.setScalar(1.35);
     this.modelPivot.add(this.fallbackGroup);
   }
 
@@ -118,15 +125,20 @@ export class Bird {
     return this.group.position;
   }
 
-  updateVisuals(dt: number, flapEnergy: number): void {
+  updateVisuals(dt: number, flapEnergy: number, bank = 0): void {
     this.group.rotation.set(0, 0, 0);
+    this.modelPivot.rotation.z = THREE.MathUtils.lerp(
+      this.modelPivot.rotation.z,
+      -bank * 0.28,
+      1 - Math.exp(-8 * dt),
+    );
 
     if (this.mixer && this.flapAction) {
-      this.flapAction.timeScale = 0.6 + flapEnergy * 2.2;
+      this.flapAction.timeScale = 0.85 + flapEnergy * 0.6;
       this.mixer.update(dt);
     } else if (this.leftWingFallback && this.rightWingFallback) {
-      this.flapPhase += dt * (3 + flapEnergy * 6);
-      const wingFlap = Math.sin(this.flapPhase) * (0.12 + flapEnergy * 0.35);
+      this.flapPhase += dt * (3 + flapEnergy * 4);
+      const wingFlap = Math.sin(this.flapPhase) * (0.12 + flapEnergy * 0.2);
       this.leftWingFallback.rotation.z = wingFlap;
       this.rightWingFallback.rotation.z = -wingFlap;
     }

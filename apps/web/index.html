@@ -7,26 +7,28 @@
     <title>Fatal Bird Vision</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app">
-      <div id="hud">
+      <div id="hud" class="hidden">
         <div class="hud-left">
-          <span class="hud-icon">🍎</span>
-          <span id="apple-count">0/0</span>
+          <span id="ring-count">0/20 rings</span>
+          <span id="player-chip"></span>
         </div>
         <div class="hud-center">
-          <span id="ring-count">Rings 0</span>
-          <span id="score-total">Score 0</span>
+          <span class="hud-label">Score</span>
+          <span id="score-total">0</span>
         </div>
         <div class="hud-right">
-          <span class="hud-icon">⏱</span>
+          <span id="streak-readout" class="hidden"></span>
           <span id="timer">0:00</span>
         </div>
       </div>
 
-      <div id="gesture-debug">
+      <div id="score-pop" class="hidden" aria-live="polite"></div>
+
+      <div id="gesture-debug" class="hidden">
         <span id="gesture-label">—</span>
         <span id="gesture-confidence">—</span>
       </div>
@@ -35,25 +37,109 @@
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="skeleton-overlay"></canvas>
         <div id="steer-reticle" aria-hidden="true"></div>
+        <div id="lean-cue" aria-hidden="true"></div>
         <div id="calibration-banner" class="hidden">
-          <p>Align your body dot with the center dot, then hold a T-pose</p>
+          <p id="calibration-copy">Spread your arms. Hold a T-pose.</p>
           <div id="calibration-progress"></div>
         </div>
       </div>
 
-      <div id="game-reticle" aria-hidden="true"></div>
+      <div id="lost-banner" class="hidden" aria-live="assertive">
+        Step back into frame
+      </div>
 
-      <div id="overlay">
-        <div id="start-screen" class="panel">
-          <h1>Fatal Bird Vision</h1>
-          <p>Move your body so the red dot meets the center dot to fly straight. Shift up or down to climb or dive. Flap to gain lift.</p>
-          <button id="btn-start">Start Flight</button>
-          <button id="btn-collect" class="secondary">Record Gestures</button>
-          <p class="hint">Keyboard: Space flap · A/D steer · W/S up/down · R restart</p>
+      <div id="overlay" class="is-menu">
+        <div id="start-screen" class="menu-screen">
+          <header class="menu-top">
+            <div class="menu-brand">
+              <p class="menu-club">Fatal Error Club</p>
+              <h1>Fatal Bird Vision</h1>
+            </div>
+            <div class="menu-top-actions">
+              <button id="btn-scores" class="secondary">Scores</button>
+              <button id="btn-collect" class="ghost">Dev</button>
+            </div>
+          </header>
+
+          <div class="menu-stage">
+            <button type="button" id="btn-skin-prev" class="skin-arrow" aria-label="Previous bird">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <div class="skin-stage">
+              <canvas id="skin-canvas"></canvas>
+              <div class="skin-caption">
+                <p id="skin-name">Scarlet Macaw</p>
+                <div id="skin-dots" class="skin-dots" aria-hidden="true"></div>
+                <p id="skin-hint">Left or right to change</p>
+              </div>
+            </div>
+            <button type="button" id="btn-skin-next" class="skin-arrow" aria-label="Next bird">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 5 L16 12 L9 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="menu-dock">
+            <div class="menu-field">
+              <label class="field-label" for="player-name">Your name</label>
+              <input
+                id="player-name"
+                type="text"
+                maxlength="24"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Pilot name"
+              />
+              <p id="name-hint" class="field-hint hidden">Enter a name to fly.</p>
+            </div>
+
+            <div class="menu-picks">
+              <p class="field-label">Map</p>
+              <div id="map-grid" role="radiogroup" aria-label="Map">
+                <button type="button" class="map-card map-canyon selected" data-map="canyon" aria-pressed="true">
+                  <img class="map-card-photo" src="/maps/canyon.png" alt="" />
+                  <span class="map-card-copy">
+                    <span class="diff-name">Canyon</span>
+                  </span>
+                </button>
+                <button type="button" class="map-card map-city" data-map="city" aria-pressed="false">
+                  <img class="map-card-photo" src="/maps/city.png" alt="" />
+                  <span class="map-card-copy">
+                    <span class="diff-name">City</span>
+                  </span>
+                </button>
+              </div>
+              <p class="field-label">Difficulty</p>
+              <div id="difficulty-grid" class="pick-row" role="radiogroup" aria-label="Difficulty">
+                <button type="button" class="pick" data-diff="easy">
+                  Easy
+                  <span>1×</span>
+                </button>
+                <button type="button" class="pick selected" data-diff="normal" aria-pressed="true">
+                  Normal
+                  <span>1.5×</span>
+                </button>
+                <button type="button" class="pick" data-diff="hard">
+                  Hard
+                  <span>2.5×</span>
+                </button>
+                <button type="button" class="pick" data-diff="impossible">
+                  Impossible
+                  <span>4×</span>
+                </button>
+              </div>
+            </div>
+
+            <button id="btn-start">Start Flight</button>
+          </div>
         </div>
 
         <div id="collect-screen" class="panel hidden">
-          <h2>Gesture Recorder</h2>
+          <p class="kicker">Studio</p>
+          <h2>Gesture recorder</h2>
           <p>Hold a label, perform the gesture for 3 seconds, repeat for each class.</p>
           <div class="collect-buttons">
             <button data-label="flap">Record Flap</button>
@@ -67,12 +153,42 @@
           <button id="btn-back-game" class="secondary">Back to Game</button>
         </div>
 
-        <div id="finish-screen" class="panel hidden">
-          <h2>Course Complete</h2>
+        <div id="finish-screen" class="panel hidden win-panel">
+          <h2 id="finish-heading">You made it</h2>
+          <img id="finish-photo" class="finish-photo hidden" alt="Finish photo" />
           <p id="finish-stats"></p>
-          <button id="btn-restart">Fly Again</button>
+          <ul id="finish-recap" class="finish-recap"></ul>
+          <div class="kiosk-actions">
+            <button id="btn-restart">Fly Again</button>
+            <button id="btn-next-player" class="secondary">Next visitor</button>
+            <button id="btn-finish-scores" class="ghost">Scores</button>
+          </div>
+        </div>
+
+        <div
+          id="board-screen"
+          class="panel board-panel hidden"
+          role="dialog"
+          aria-labelledby="board-heading"
+          aria-modal="true"
+        >
+          <div class="board-head">
+            <h2 id="board-heading">Scores</h2>
+            <button type="button" id="btn-board-close" class="secondary">Back</button>
+          </div>
+          <div id="board-filters" class="board-filters" role="tablist" aria-label="Difficulty">
+            <button type="button" data-board-diff="all" class="selected">All</button>
+            <button type="button" data-board-diff="easy">Easy</button>
+            <button type="button" data-board-diff="normal">Normal</button>
+            <button type="button" data-board-diff="hard">Hard</button>
+            <button type="button" data-board-diff="impossible">Impossible</button>
+          </div>
+          <p id="board-status" class="board-status">Loading scores</p>
+          <ol id="board-list" class="score-sheet"></ol>
         </div>
       </div>
+
+      <canvas id="confetti-canvas" aria-hidden="true"></canvas>
 
       <canvas id="game-canvas"></canvas>
     </div>

@@ -1,24 +1,34 @@
 import type { CourseStats } from "../types";
-import { SCORING } from "../constants";
+import { SCORING, SPEED_GATE_XP, streakAward } from "../constants";
 
 export class ScoreManager {
   ringsCollected = 0;
-  applesCollected = 0;
   elapsedSeconds = 0;
+  lastAward = 0;
+  multiplier = 1;
+  streak = 0;
+  bestStreak = 0;
+  misses = 0;
+  boosts = 0;
   readonly ringsTotal: number;
-  readonly applesTotal: number;
   private running = false;
+  private points = 0;
 
-  constructor(ringsTotal: number, applesTotal: number) {
+  constructor(ringsTotal: number) {
     this.ringsTotal = ringsTotal;
-    this.applesTotal = applesTotal;
   }
 
-  start(): void {
+  start(multiplier = 1): void {
     this.running = true;
     this.ringsCollected = 0;
-    this.applesCollected = 0;
     this.elapsedSeconds = 0;
+    this.points = 0;
+    this.lastAward = 0;
+    this.streak = 0;
+    this.bestStreak = 0;
+    this.misses = 0;
+    this.boosts = 0;
+    this.multiplier = multiplier;
   }
 
   stop(): void {
@@ -29,27 +39,45 @@ export class ScoreManager {
     if (this.running) this.elapsedSeconds += dt;
   }
 
-  addRing(): void {
+  addRing(): number {
+    this.streak += 1;
     this.ringsCollected += 1;
+    this.bestStreak = Math.max(this.bestStreak, this.streak);
+    const award = streakAward(this.streak, this.multiplier);
+    this.points += award;
+    this.lastAward = award;
+    return award;
   }
 
-  addApple(): void {
-    this.applesCollected += 1;
+  addBoost(): number {
+    this.boosts += 1;
+    const award = Math.round(SPEED_GATE_XP * this.multiplier);
+    this.points += award;
+    this.lastAward = award;
+    return award;
+  }
+
+  breakStreak(): void {
+    if (this.streak > 0) this.misses += 1;
+    this.streak = 0;
+  }
+
+  noteMiss(): void {
+    this.misses += 1;
+    this.streak = 0;
   }
 
   get score(): number {
     const timeBonus = Math.max(
       0,
-      Math.floor(120 - this.elapsedSeconds) * SCORING.timeBonusPerSecond,
+      Math.floor(90 - this.elapsedSeconds) *
+        SCORING.timeBonusPerSecond *
+        this.multiplier,
     );
-    return (
-      this.ringsCollected * SCORING.ringPoints +
-      this.applesCollected * SCORING.applePoints +
-      timeBonus
-    );
+    return Math.round(this.points + timeBonus);
   }
 
-  isCourseComplete(finishZ: number, birdZ: number): boolean {
+  isComplete(finishZ: number, birdZ: number): boolean {
     return birdZ >= finishZ;
   }
 
@@ -57,33 +85,77 @@ export class ScoreManager {
     return {
       ringsCollected: this.ringsCollected,
       ringsTotal: this.ringsTotal,
-      applesCollected: this.applesCollected,
-      applesTotal: this.applesTotal,
       elapsedSeconds: this.elapsedSeconds,
       score: this.score,
+      bestStreak: this.bestStreak,
+      misses: this.misses,
+      boosts: this.boosts,
     };
   }
 }
 
 export class HUD {
-  private readonly appleEl = document.getElementById("apple-count")!;
   private readonly ringEl = document.getElementById("ring-count")!;
   private readonly scoreEl = document.getElementById("score-total")!;
   private readonly timerEl = document.getElementById("timer")!;
-  private readonly gestureLabel = document.getElementById("gesture-label")!;
-  private readonly gestureConf = document.getElementById("gesture-confidence")!;
+  private readonly streakEl = document.getElementById("streak-readout");
+  private readonly chipEl = document.getElementById("player-chip");
+  private readonly popEl = document.getElementById("score-pop");
+  private popUntil = 0;
+
+  setPilot(name: string, difficultyLabel: string, multiplier: number): void {
+    if (!this.chipEl) return;
+    const mult =
+      multiplier === 1 ? "1×" : `${multiplier.toString().replace(/\.0$/, "")}×`;
+    this.chipEl.textContent = `${name} · ${difficultyLabel} · ${mult}`;
+  }
 
   updateScore(sm: ScoreManager): void {
-    this.appleEl.textContent = `${sm.applesCollected}/${sm.applesTotal}`;
-    this.ringEl.textContent = `Rings ${sm.ringsCollected}/${sm.ringsTotal}`;
-    this.scoreEl.textContent = `Score ${sm.score}`;
+    this.ringEl.textContent = `${sm.ringsCollected}/${sm.ringsTotal} rings`;
+    this.scoreEl.textContent = `${sm.score}`;
     const m = Math.floor(sm.elapsedSeconds / 60);
     const s = Math.floor(sm.elapsedSeconds % 60);
     this.timerEl.textContent = `${m}:${s.toString().padStart(2, "0")}`;
+    if (this.streakEl) {
+      if (sm.streak >= 1) {
+        this.streakEl.textContent = `chain ${sm.streak}`;
+        this.streakEl.classList.remove("hidden");
+        this.streakEl.classList.toggle("hot", sm.streak >= 4);
+      } else {
+        this.streakEl.textContent = "";
+        this.streakEl.classList.add("hidden");
+        this.streakEl.classList.remove("hot");
+      }
+    }
   }
 
-  updateGesture(label: string, confidence: number): void {
-    this.gestureLabel.textContent = label;
-    this.gestureConf.textContent = `${Math.round(confidence * 100)}% conf`;
+  celebrate(points: number): void {
+    this.showPop(`+${points} XP`, false);
+  }
+
+  celebrateMiss(): void {
+    this.showPop("Miss", true);
+  }
+
+  celebrateBoost(points: number): void {
+    this.showPop(`Boost +${points}`, false);
+  }
+
+  tick(): void {
+    if (this.popEl && performance.now() > this.popUntil) {
+      this.popEl.classList.remove("show", "miss");
+      this.popEl.classList.add("hidden");
+    }
+  }
+
+  private showPop(text: string, miss: boolean): void {
+    if (!this.popEl) return;
+    this.popEl.textContent = text;
+    this.popEl.classList.toggle("miss", miss);
+    this.popEl.classList.remove("hidden");
+    this.popEl.classList.remove("show");
+    void this.popEl.offsetWidth;
+    this.popEl.classList.add("show");
+    this.popUntil = performance.now() + (miss ? 700 : 900);
   }
 }

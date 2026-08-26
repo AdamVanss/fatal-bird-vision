@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TUNNEL } from "../constants";
+import { CANYON } from "../constants";
 
 export interface TunnelWaypoint {
   x: number;
@@ -7,24 +7,17 @@ export interface TunnelWaypoint {
   z: number;
 }
 
+/** Invisible flight path through the canyon. No tube mesh. */
 export class FlightTunnel {
   readonly waypoints: THREE.Vector3[];
   readonly finishZ: number;
-  private readonly curve: THREE.CatmullRomCurve3;
-  private readonly mesh: THREE.Group;
+  readonly meshGroup = new THREE.Group();
 
   constructor(waypoints: TunnelWaypoint[]) {
     this.waypoints = waypoints.map((w) => new THREE.Vector3(w.x, w.y, w.z));
-    this.finishZ = this.waypoints[this.waypoints.length - 1].z + 20;
-    this.curve = new THREE.CatmullRomCurve3(this.waypoints, false, "catmullrom", 0.35);
-    this.mesh = this.buildVisuals();
+    this.finishZ = this.waypoints[this.waypoints.length - 1].z;
   }
 
-  get meshGroup(): THREE.Group {
-    return this.mesh;
-  }
-
-  /** Tunnel center on the course line at the bird's current Z */
   getCenterAt(z: number): THREE.Vector3 {
     const pts = this.waypoints;
     if (z <= pts[0].z) return pts[0].clone();
@@ -44,15 +37,14 @@ export class FlightTunnel {
       }
     }
 
-    const total = last.z;
-    return this.curve.getPointAt(THREE.MathUtils.clamp(z / total, 0, 1));
+    return last.clone();
   }
 
-  /** Hard clamp — bird cannot leave the tunnel volume */
+  /** Soft clamp inside the canyon play volume */
   constrain(position: THREE.Vector3, velocity: THREE.Vector3): void {
     const center = this.getCenterAt(position.z);
-    const hw = TUNNEL.playHalfWidth;
-    const hh = TUNNEL.playHalfHeight;
+    const hw = CANYON.playHalfWidth;
+    const hh = CANYON.playHalfHeight;
 
     const relX = position.x - center.x;
     const relY = position.y - center.y;
@@ -60,60 +52,11 @@ export class FlightTunnel {
     const clampedX = THREE.MathUtils.clamp(relX, -hw, hw);
     const clampedY = THREE.MathUtils.clamp(relY, -hh, hh);
 
-    if (clampedX !== relX) velocity.x = 0;
-    if (clampedY !== relY) velocity.y = 0;
+    if (clampedX !== relX) velocity.x *= 0.2;
+    if (clampedY !== relY) velocity.y *= 0.2;
 
     position.x = center.x + clampedX;
     position.y = center.y + clampedY;
-    position.z = THREE.MathUtils.clamp(position.z, 0, this.finishZ);
-  }
-
-  getGuidanceForce(position: THREE.Vector3): { x: number; y: number } {
-    const center = this.getCenterAt(position.z);
-    return {
-      x: (center.x - position.x) * 0.2,
-      y: (center.y - position.y) * 0.25,
-    };
-  }
-
-  private buildVisuals(): THREE.Group {
-    const group = new THREE.Group();
-    const visualRadius = TUNNEL.halfWidth;
-
-    const tube = new THREE.Mesh(
-      new THREE.TubeGeometry(this.curve, 160, visualRadius * 0.95, 14, false),
-      new THREE.MeshStandardMaterial({
-        color: 0x7ec8e3,
-        transparent: true,
-        opacity: 0.16,
-        side: THREE.BackSide,
-        roughness: 0.2,
-        metalness: 0.1,
-        depthWrite: false,
-      }),
-    );
-    group.add(tube);
-
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0x2a4a42,
-      emissive: 0x3ecf8e,
-      emissiveIntensity: 0.25,
-      transparent: true,
-      opacity: 0.55,
-      metalness: 0.4,
-    });
-
-    for (let z = 0; z <= this.waypoints[this.waypoints.length - 1].z; z += 13) {
-      const center = this.getCenterAt(z);
-      const frame = new THREE.Mesh(
-        new THREE.TorusGeometry(visualRadius * 0.92, 0.06, 6, 24),
-        ringMat,
-      );
-      frame.position.copy(center);
-      frame.rotation.x = Math.PI / 2;
-      group.add(frame);
-    }
-
-    return group;
+    position.z = Math.max(0, position.z);
   }
 }

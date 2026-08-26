@@ -40,6 +40,10 @@ export class WebcamManager {
     }
   }
 
+  get stream(): MediaStream | null {
+    return (this.video.srcObject as MediaStream | null) ?? null;
+  }
+
   stop(): void {
     const stream = this.video.srcObject as MediaStream | null;
     stream?.getTracks().forEach((t) => t.stop());

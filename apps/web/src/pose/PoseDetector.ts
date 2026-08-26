@@ -133,6 +133,8 @@ export class SkeletonOverlay {
     landmarks: Array<{ x: number; y: number; z?: number }> | null,
     bodyCenter: { x: number; y: number } | null = null,
     aligned = false,
+    rest: { x: number; y: number } | null = null,
+    lean: { x: number; y: number } | null = null,
   ): void {
     this.resize(video);
 
@@ -154,10 +156,26 @@ export class SkeletonOverlay {
       radius: 5,
     });
 
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
     if (bodyCenter) {
-      const x = bodyCenter.x * this.canvas.width;
-      const y = bodyCenter.y * this.canvas.height;
-      const r = aligned ? 14 : 11;
+      const x = bodyCenter.x * w;
+      const y = bodyCenter.y * h;
+      const leaning =
+        lean && (Math.abs(lean.x) > 0.08 || Math.abs(lean.y) > 0.08);
+      const r = aligned ? 14 : leaning ? 13 : 11;
+
+      if (lean && (Math.abs(lean.x) > 0.08 || Math.abs(lean.y) > 0.08) && rest) {
+        const rx = rest.x * w;
+        const ry = rest.y * h;
+        this.ctx.strokeStyle = "rgba(255, 107, 107, 0.85)";
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.moveTo(rx, ry);
+        this.ctx.lineTo(x, y);
+        this.ctx.stroke();
+      }
 
       this.ctx.beginPath();
       this.ctx.arc(x, y, r + 4, 0, Math.PI * 2);
@@ -167,7 +185,9 @@ export class SkeletonOverlay {
 
       this.ctx.beginPath();
       this.ctx.arc(x, y, r, 0, Math.PI * 2);
-      this.ctx.fillStyle = aligned ? "rgba(62, 207, 142, 0.85)" : "rgba(255, 107, 107, 0.9)";
+      this.ctx.fillStyle = aligned
+        ? "rgba(62, 207, 142, 0.85)"
+        : "rgba(255, 107, 107, 0.9)";
       this.ctx.fill();
     }
   }

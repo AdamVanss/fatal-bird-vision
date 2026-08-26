@@ -1,4 +1,4 @@
-import type { GestureClass } from "./constants";
+import type { DifficultyId, GestureClass } from "./constants";
 
 export interface Vec3 {
   x: number;
@@ -40,8 +40,20 @@ export interface RecordedSample {
 export interface CourseStats {
   ringsCollected: number;
   ringsTotal: number;
-  applesCollected: number;
-  applesTotal: number;
   elapsedSeconds: number;
   score: number;
+  bestStreak: number;
+  misses: number;
+  boosts: number;
+}
+
+export interface PlayerRun {
+  name: string;
+  difficulty: DifficultyId;
+  multiplier: number;
+  score: number;
+  ringsCollected: number;
+  ringsTotal: number;
+  elapsedSeconds: number;
+  at: string;
 }
